@@ -3,16 +3,26 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { pool } from "../db.js";
 import { extractPdfPages } from "../services/pdf.service.js";
+import {
+  authenticateToken,
+  type AuthenticatedRequest,
+} from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-router.get("/", async (_req, res) => {
+router.use(authenticateToken);
+
+router.get("/", async (req, res) => {
+  const userId = (req as AuthenticatedRequest).userId!;
+
   try {
     const result = await pool.query(
       `SELECT id, filename, page_count, status
        FROM documents
-       WHERE status = 'ready'
+       WHERE user_id = $1
+         AND status = 'ready'
        ORDER BY created_at DESC`,
+      [userId],
     );
 
     res.status(200).json({
@@ -51,6 +61,7 @@ const upload = multer({
 });
 
 router.post("/extract", upload.single("file"), async (req, res) => {
+  const userId = (req as AuthenticatedRequest).userId!;
   let documentId: string | null = null;
 
   try {
@@ -64,29 +75,27 @@ router.post("/extract", upload.single("file"), async (req, res) => {
 
     documentId = randomUUID();
 
-    // Step 1: Save document metadata.
     await pool.query(
       `INSERT INTO documents (
         id,
+        user_id,
         filename,
         mime_type,
         file_size,
         page_count,
         status
       )
-      VALUES ($1, $2, $3, $4, 0, 'processing')`,
+      VALUES ($1, $2, $3, $4, $5, 0, 'processing')`,
       [
         documentId,
+        userId,
         req.file.originalname,
         req.file.mimetype,
         req.file.size,
       ],
     );
 
-    // Step 2: Extract text from the PDF.
     const pages = await extractPdfPages(req.file.buffer);
-
-    // Step 3: Save extracted page text and update status.
     const client = await pool.connect();
 
     try {
@@ -104,13 +113,18 @@ router.post("/extract", upload.single("file"), async (req, res) => {
         );
       }
 
-      await client.query(
+      const updateResult = await client.query(
         `UPDATE documents
          SET page_count = $1,
              status = 'ready'
-         WHERE id = $2`,
-        [pages.length, documentId],
+         WHERE id = $2
+           AND user_id = $3`,
+        [pages.length, documentId, userId],
       );
+
+      if (updateResult.rowCount !== 1) {
+        throw new Error("Document ownership verification failed.");
+      }
 
       await client.query("COMMIT");
     } catch (databaseError) {
@@ -120,7 +134,6 @@ router.post("/extract", upload.single("file"), async (req, res) => {
       client.release();
     }
 
-    // Step 4: Return the saved document details.
     res.status(201).json({
       success: true,
       message: "PDF uploaded and processed successfully.",
@@ -133,16 +146,19 @@ router.post("/extract", upload.single("file"), async (req, res) => {
       pages,
     });
   } catch (error) {
-    console.error("PDF processing failed:", error);
+    console.error(
+      "PDF processing failed:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
 
-    // Mark the document as failed if its metadata was saved.
     if (documentId) {
       try {
         await pool.query(
           `UPDATE documents
            SET status = 'failed'
-           WHERE id = $1`,
-          [documentId],
+           WHERE id = $1
+             AND user_id = $2`,
+          [documentId, userId],
         );
       } catch (updateError) {
         console.error("Could not update document status:", updateError);

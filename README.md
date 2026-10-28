@@ -1,182 +1,198 @@
-📄 DocuMind AI
+# 📄 DocuMind AI
 
-AI-powered document understanding and question-answering system with source citations.
+**AI-powered document understanding and question-answering with source citations.**
 
-DocuMind AI allows users to upload PDF documents, ask questions about their contents, and receive AI-generated answers grounded in relevant document passages. It retrieves supporting text from uploaded documents to help users verify the answers.
+DocuMind AI allows users to upload PDF documents, ask natural-language questions about their contents, and receive AI-generated answers grounded in relevant document passages.
 
-✨ Features
+The application combines PostgreSQL search, PDF text extraction, and the Google Gemini API to help users find information in their documents.
 
-📤 PDF Upload: Upload PDF documents for text extraction and processing.
+## ✨ Features
 
-🔍 Document Search: Search document content using PostgreSQL full-text search and keyword matching.
+- **PDF Upload:** Upload PDF documents and extract their text.
+- **Document Search:** Retrieve relevant passages using PostgreSQL full-text search and keyword matching.
+- **AI-Powered Answers:** Generate context-aware answers using the Google Gemini API.
+- **Source Citations:** Display supporting passages with document names and page references when available.
+- **User Authentication:** Log in using the backend authentication API.
+- **Protected APIs:** Require authentication for document and search operations.
+- **Document Ownership:** Scope document access to the authenticated user.
+- **Interactive Interface:** Upload documents, ask questions, review answers, and view supporting sources.
+- **Automated Tests:** Test authentication, document routes, and search route behaviour.
 
-🤖 AI-Powered Answers: Generate context-aware answers using the Google Gemini API.
+## 🛠️ Tech Stack
 
-📚 Source Citations: Display relevant source passages with document names and page references.
+### Frontend
+- Next.js
+- React
+- TypeScript
+- CSS
 
-🛡️ Grounded Responses: Help users verify answers against retrieved document content and identify information that is not specified in a document.
+### Backend
+- Node.js
+- Express.js
+- TypeScript
+- PostgreSQL
+- `pg` — PostgreSQL client
+- `pdf-parse` — PDF text extraction
+- Google Gemini API — AI-generated answers
+- JWT — Authentication tokens
+- bcrypt — Password hashing
 
-⚡ Interactive Interface: Ask questions and view answers, retrieved passages, and citations through a Next.js web interface.
+### Testing
+- Vitest
+- Supertest
 
-🛠️ Tech Stack
+## 📋 Prerequisites
 
-Frontend
+Before running the application, install or configure:
 
-Next.js
+- Node.js and npm
+- PostgreSQL
+- A Google Gemini API key
+- Git
 
-React
+## 🚀 Getting Started
 
-TypeScript
+### 1. Clone the Repository
 
-CSS
-
-Backend
-
-Node.js
-
-Express.js
-
-TypeScript
-
-PostgreSQL
-
-pg — PostgreSQL client
-
-pdf-parse — PDF text extraction
-
-Google Gemini API — AI-generated answers
-
-⚙️ Prerequisites
-
-Before running the project, ensure you have:
-
-Node.js and npm installed.
-
-PostgreSQL installed and running.
-
-A Google Gemini API key.
-
-🚀 Getting Started
-
-1. Clone the Repository
-
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+```bash
+git clone https://github.com/nirbhayyyy18/documind-ai.git
 cd documind-ai
+```
 
-Replace <YOUR_GITHUB_REPOSITORY_URL> with your actual GitHub repository URL.
+### 2. Configure PostgreSQL
 
-2. Set Up the Database
+Create a PostgreSQL database named `documind_ai`:
 
-Create a PostgreSQL database named documind_ai.
-
+```sql
 CREATE DATABASE documind_ai;
+```
 
-Ensure the database credentials in your backend environment configuration match your local PostgreSQL setup.
+Ensure PostgreSQL is running and that your database credentials are correct.
 
-The required database tables must be created before using document upload and search functionality.
+Apply the SQL migration files provided in the `backend/migrations/` directory in the appropriate order. These migrations establish the database structure required by the application, including authentication and document ownership.
 
-3. Configure the Backend
+### 3. Configure Environment Variables
 
-Navigate to the backend directory:
+Copy the root `.env.example` file into `backend/.env`.
 
+From the project root, run:
+
+```powershell
+Copy-Item .env.example backend/.env
+```
+
+Open `backend/.env` and replace the placeholder values with your own local PostgreSQL credentials and Gemini API key.
+
+The configuration includes:
+
+| Variable | Purpose |
+|---|---|
+| `DB_HOST` | PostgreSQL server hostname |
+| `DB_PORT` | PostgreSQL server port |
+| `DB_NAME` | Database name |
+| `DB_USER` | PostgreSQL username |
+| `DB_PASSWORD` | PostgreSQL password |
+| `JWT_SECRET` | Secret used to sign authentication tokens |
+| `GEMINI_API_KEY` | Google Gemini API key |
+
+Use a randomly generated JWT secret with at least 32 characters.
+
+**Security:** Never commit `.env` files, database passwords, JWT secrets, or API keys to GitHub.
+
+### 4. Install and Run the Backend
+
+Open a terminal in the project root:
+
+```powershell
 cd backend
 npm install
-
-Create a .env file inside backend/ with the following variables:
-
-PORT=5000
-DATABASE_URL=postgresql://YOUR_DB_USER:YOUR_DB_PASSWORD@localhost:5432/documind_ai
-GEMINI_API_KEY=YOUR_GEMINI_API_KEY
-
-Replace the placeholder values with your own database credentials and Gemini API key.
-
-Important: Never commit your .env file or expose your API key publicly.
-
-Start the backend development server:
-
 npm run dev
+```
 
-The backend API should be available at:
+The backend should run at:
 
-http://localhost:5000
+`http://localhost:5000`
 
-4. Set Up the Frontend
+Keep this terminal running.
 
-Open a second terminal from the project root:
+### 5. Install and Run the Frontend
 
+Open a second terminal in the project root:
+
+```powershell
 cd frontend
 npm install
-
-Start the frontend development server:
-
 npm run dev
+```
 
 Open the application in your browser:
 
-http://localhost:3000
+`http://localhost:3000`
 
-Keep the backend and frontend development servers running while using the application.
+Keep both development servers running while using the application.
 
-💡 How It Works
+## 🔄 How It Works
 
-Upload a PDF document through the web interface.
+1. The user logs in through the application.
+2. The user uploads a PDF document.
+3. The backend extracts text and processes the document.
+4. Document information is stored in PostgreSQL.
+5. The user asks a question about the available documents.
+6. The backend retrieves relevant passages using PostgreSQL search.
+7. Retrieved passages are supplied as context to the Gemini API.
+8. The application displays the generated answer and supporting source references.
 
-The backend extracts text from the uploaded PDF.
+## 🔌 API Overview
 
-The extracted document content is stored and made searchable.
+The backend exposes the following primary endpoints.
 
-Enter a question about the uploaded document.
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/health` | Check backend health |
+| `POST` | `/api/auth/login` | Authenticate a user and obtain a token |
+| `GET` | `/api/documents` | Retrieve the authenticated user's documents |
+| `POST` | `/api/documents/extract` | Upload and extract text from a PDF |
+| `GET` | `/api/search?q=your-question` | Search document content and generate an answer |
 
-The backend searches for relevant passages in PostgreSQL.
+Protected document and search endpoints require a valid authentication token.
 
-Relevant passages are supplied as context to the Gemini API.
+Include the token in the request header:
 
-The application displays the generated answer and supporting source references.
+```http
+Authorization: Bearer YOUR_JWT_TOKEN
+```
 
-🔌 API Overview
+Refer to the backend route implementations for the precise request formats and response structures.
 
-Method
+## 🧪 Running Automated Tests
 
-Endpoint
+From the backend directory, run:
 
-Purpose
+```powershell
+npm test
+```
 
-GET
+The automated test suite covers authentication middleware, login validation, document routes, and search routes.
 
-/api/health
+The current suite contains 18 tests across four test files.
 
-Check backend health
+## 🔐 Security and Limitations
 
-POST
+- Keep API keys and database credentials in environment variables.
+- Protected endpoints require authentication.
+- Document queries are scoped to the authenticated user.
+- AI-generated answers may contain errors; verify important information against the cited passages.
+- Answer quality depends on PDF text extraction and the relevance of retrieved passages.
+- Gemini API availability and usage limits may affect answer generation.
+- The current document workflow focuses on PDFs.
+- Search currently uses PostgreSQL full-text search and keyword matching; this is not the same as vector-based semantic search.
 
-/api/documents/extract
+## 🎯 Project Goal
 
-Upload and extract PDF text
+DocuMind AI aims to make document analysis faster and more accessible by allowing users to ask natural-language questions and receive AI-generated answers supported by relevant document passages.
 
-GET
+## 👨‍💻 Author
 
-/api/search?q=your-question
-
-Search document content and generate an answer
-
-🔐 Security and Limitations
-
-API keys and database credentials must be stored in environment variables.
-
-Answers depend on the quality of the extracted text and the relevance of retrieved passages.
-
-AI-generated answers may not always be correct; verify important information against the cited source.
-
-API usage limits may affect answer generation.
-
-The project currently focuses on PDF documents.
-
-🎯 Project Goal
-
-The goal of DocuMind AI is to make document analysis faster and more accessible by allowing users to ask natural-language questions and receive answers supported by relevant passages from their own documents.
-
-👨‍💻 Author
-
-Nirbhay Tiwari
+**Nirbhay Tiwari**
 
 Built with Next.js, Express.js, PostgreSQL, and Google Gemini.

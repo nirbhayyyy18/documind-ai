@@ -35,13 +35,73 @@ export default function Home() {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [loginEmail, setLoginEmail] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
+  const [loggingIn, setLoggingIn] = useState(false);
+  const [currentUser, setCurrentUser] = useState<{
+    id: string;
+    name: string;
+    email: string;
+  } | null>(null);
+
+  async function handleLogin(event: React.FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+  setError("");
+  setMessage("");
+
+  if (!loginEmail.trim() || !loginPassword) {
+    setError("Please enter your email and password.");
+    return;
+  }
+
+  setLoggingIn(true);
+
+  try {
+    const response = await fetch(`${API_URL}/api/auth/login`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: loginEmail.trim(),
+        password: loginPassword,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok || !data.token || !data.user) {
+      throw new Error(data.error || data.message || "Login failed.");
+    }
+
+    setToken(data.token);
+    setCurrentUser(data.user);
+    setLoginPassword("");
+    setMessage(`Welcome, ${data.user.name}!`);
+  } catch (err) {
+    setError(
+      err instanceof Error ? err.message : "Unable to log in.",
+    );
+  } finally {
+    setLoggingIn(false);
+  }
+}
 
   useEffect(() => {
   let cancelled = false;
 
+  if (!token) {
+    return;
+  }
+
   async function loadDocuments() {
     try {
-      const response = await fetch(`${API_URL}/api/documents`);
+      const response = await fetch(`${API_URL}/api/documents`, {
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
+      });
       const data = await response.json();
 
       if (!response.ok || !data.success) {
@@ -68,7 +128,7 @@ export default function Home() {
   return () => {
     cancelled = true;
   };
-}, []);
+}, [token]);
 
   async function handleUpload() {
     if (!file) {
@@ -102,6 +162,9 @@ export default function Home() {
 
       const response = await fetch(`${API_URL}/api/documents/extract`, {
         method: "POST",
+        headers: {
+          Authorization: token ? `Bearer ${token}` : "",
+        },
         body: formData,
       });
 
@@ -168,6 +231,11 @@ export default function Home() {
 
       const response = await fetch(
         `${API_URL}/api/search?${params.toString()}`,
+        {
+          headers: {
+            Authorization: token ? `Bearer ${token}` : "",
+          },
+        },
       );
 
       const data = await response.json();
@@ -207,6 +275,85 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-[#f7f8fc] text-slate-900">
+            {!token ? (
+        <section className="flex min-h-screen items-center justify-center px-5 py-12">
+          <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-xl bg-indigo-600 text-2xl font-bold text-white">
+              D
+            </div>
+
+            <h2 className="text-2xl font-bold tracking-tight">
+              Welcome to DocuMind AI
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Sign in to upload documents and ask questions about your PDFs.
+            </p>
+
+            <form onSubmit={handleLogin} className="mt-7 space-y-5">
+              <div>
+                <label
+                  htmlFor="login-email"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Email address
+                </label>
+
+                <input
+                  id="login-email"
+                  type="email"
+                  autoComplete="username"
+                  required
+                  value={loginEmail}
+                  onChange={(event) => setLoginEmail(event.target.value)}
+                  placeholder="you@example.com"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="login-password"
+                  className="mb-2 block text-sm font-medium text-slate-700"
+                >
+                  Password
+                </label>
+
+                <input
+                  id="login-password"
+                  type="password"
+                  autoComplete="current-password"
+                  required
+                  value={loginPassword}
+                  onChange={(event) => setLoginPassword(event.target.value)}
+                  placeholder="Enter your password"
+                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                />
+              </div>
+
+              {error && (
+                <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="submit"
+                disabled={loggingIn}
+                className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loggingIn ? "Signing in..." : "Sign in"}
+              </button>
+            </form>
+
+            <p className="mt-6 text-center text-xs text-slate-500">
+              Secure access to your personal document workspace.
+            </p>
+          </div>
+        </section>
+      ) : (
+        <>
+
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-5 py-4 sm:px-8">
           <Link href="/" className="flex items-center gap-3">
@@ -225,10 +372,41 @@ export default function Home() {
             </div>
           </Link>
 
-          <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Workspace ready
+          <div className="flex items-center gap-3">
+            <div className="hidden text-right sm:block">
+              <p className="text-sm font-medium text-slate-800">
+                {currentUser?.name || "User"}
+              </p>
+              <p className="text-xs text-slate-500">
+                {currentUser?.email || ""}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700">
+              <span className="h-2 w-2 rounded-full bg-emerald-500" />
+              Workspace ready
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setToken(null);
+                setCurrentUser(null);
+                setDocuments([]);
+                setDocument(null);
+                setResults([]);
+                setAnswer("");
+                setQuestion("");
+                setSelectedDocumentId("all");
+                setError("");
+                setMessage("");
+              }}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+            >
+              Logout
+            </button>
           </div>
+
         </div>
       </header>
 
@@ -573,6 +751,8 @@ export default function Home() {
           <p>Built with Next.js, Express and PostgreSQL</p>
         </footer>
       </div>
-    </main>
+        </>
+      )}
+      </main>
   );
 }

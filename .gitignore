@@ -27,3 +27,11 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# Database backups
+*.dump
+*.backup
+*.sql.backup
+
+# Test coverage
+coverage/

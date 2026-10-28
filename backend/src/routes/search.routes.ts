@@ -1,10 +1,19 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { generateDocumentAnswer } from "../services/answer.service.js";
+import {
+  authenticateToken,
+  type AuthenticatedRequest,
+} from "../middleware/auth.middleware.js";
 
 const router = Router();
 
+// All search requests require authentication.
+router.use(authenticateToken);
+
 router.get("/", async (req, res) => {
+  const userId = (req as AuthenticatedRequest).userId!;
+
   try {
     const question =
       typeof req.query.q === "string" ? req.query.q.trim() : "";
@@ -30,13 +39,27 @@ router.get("/", async (req, res) => {
       return;
     }
 
+    // Validate documentId before PostgreSQL attempts a UUID cast.
+    if (
+      documentId &&
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        documentId,
+      )
+    ) {
+      res.status(400).json({
+        success: false,
+        message: "Please provide a valid document ID.",
+      });
+      return;
+    }
+
     const stopWords = new Set([
       "a", "an", "and", "are", "as", "at", "be", "by",
       "for", "from", "how", "i", "in", "is", "it", "list",
       "of", "on", "or", "the", "to", "what", "which",
       "who", "why", "with", "would", "should", "could",
       "all", "do", "does", "can", "give", "brief",
-      "explain", "tell", "me", "about", "please"
+      "explain", "tell", "me", "about", "please",
     ]);
 
     const searchTerms = [
@@ -91,11 +114,12 @@ router.get("/", async (req, res) => {
                   )
                 ORDER BY d.created_at DESC, d.id
               ) AS duplicate_number
-           FROM document_chunks dc
+          FROM document_chunks dc
           JOIN documents d ON d.id = dc.document_id
           CROSS JOIN query_terms qt
-          WHERE d.status = 'ready'
-            AND ($3::uuid IS NULL OR d.id = $3::uuid)
+          WHERE d.user_id = $3::uuid
+            AND d.status = 'ready'
+            AND ($4::uuid IS NULL OR d.id = $4::uuid)
             AND (
               to_tsvector('english', dc.context) @@ qt.search_query
               OR to_tsvector('english', dc.context) @@ qt.web_query
@@ -116,7 +140,7 @@ router.get("/", async (req, res) => {
       WHERE duplicate_number = 1
       ORDER BY relevance DESC, page_number ASC
       LIMIT 5`,
-      [question, searchTerms, documentId || null],
+      [question, searchTerms, userId, documentId || null],
     );
 
     const results = result.rows.map((row) => ({
@@ -159,7 +183,10 @@ router.get("/", async (req, res) => {
       citations: uniqueCitations,
     });
   } catch (error) {
-    console.error("Document question answering failed:", error);
+    console.error(
+      "Document question answering failed:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
 
     const message = error instanceof Error ? error.message : "";
 

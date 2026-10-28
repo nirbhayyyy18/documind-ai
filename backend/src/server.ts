@@ -2,6 +2,7 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import { pool } from "./db.js";
+import authRouter from "./routes/auth.routes.js";
 
 import documentsRouter from "./routes/documents.routes.js";
 import searchRouter from "./routes/search.routes.js";
@@ -21,6 +22,7 @@ app.use(express.json({ limit: "1mb" }));
 
 app.use("/api/documents", documentsRouter);
 app.use("/api/search", searchRouter);
+app.use("/api/auth", authRouter);
 app.get("/api/health", async (_req, res) => {
   try {
     const result = await pool.query("SELECT NOW() AS database_time");
