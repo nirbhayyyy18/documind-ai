@@ -9,6 +9,11 @@ router.get("/", async (req, res) => {
     const question =
       typeof req.query.q === "string" ? req.query.q.trim() : "";
 
+    const documentId =
+      typeof req.query.documentId === "string"
+        ? req.query.documentId.trim()
+        : "";
+
     if (!question) {
       res.status(400).json({
         success: false,
@@ -25,24 +30,25 @@ router.get("/", async (req, res) => {
       return;
     }
 
-          const stopWords = new Set([
-        "a","an", "and", "are", "as", "at", "be", "by",
-        "for", "from", "how", "i", "in", "is", "it", "list",
-        "of", "on", "or", "the", "to", "what", "which",
-        "who", "why", "with", "would", "should", "could",
-        "all", "do", "does", "can"
-      ]);
+    const stopWords = new Set([
+      "a", "an", "and", "are", "as", "at", "be", "by",
+      "for", "from", "how", "i", "in", "is", "it", "list",
+      "of", "on", "or", "the", "to", "what", "which",
+      "who", "why", "with", "would", "should", "could",
+      "all", "do", "does", "can", "give", "brief",
+      "explain", "tell", "me", "about", "please"
+    ]);
 
-      const searchTerms = [
-        ...new Set(
-          question
-            .toLowerCase()
-            .match(/[a-z0-9]+/g)
-            ?.filter(
-              (term) => term.length > 1 && !stopWords.has(term),
-            ) ?? [],
-        ),
-      ];
+    const searchTerms = [
+      ...new Set(
+        question
+          .toLowerCase()
+          .match(/[a-z0-9]+/g)
+          ?.filter(
+            (term) => term.length > 1 && !stopWords.has(term),
+          ) ?? [],
+      ),
+    ];
 
     const result = await pool.query(
       `WITH query_terms AS (
@@ -50,19 +56,32 @@ router.get("/", async (req, res) => {
             plainto_tsquery('english', $1) AS search_query,
             websearch_to_tsquery('english', $1) AS web_query
       ),
-      ranked_passages AS (
+      matched_passages AS (
           SELECT
               d.id AS document_id,
               d.filename,
               dc.page_number,
               dc.context,
-              ts_rank_cd(
-                to_tsvector('english', dc.context),
-                qt.search_query
+              (
+                ts_rank_cd(
+                  to_tsvector('english', dc.context),
+                  qt.search_query
+                )
+                +
+                ts_rank_cd(
+                  to_tsvector('english', dc.context),
+                  qt.web_query
+                )
+                +
+                COALESCE((
+                  SELECT COUNT(*)::real * 0.05
+                  FROM unnest($2::text[]) AS term
+                  WHERE dc.context ILIKE '%' || term || '%'
+                ), 0)
               ) AS relevance,
               ROW_NUMBER() OVER (
                 PARTITION BY
-                  LOWER(d.filename),
+                  d.filename,
                   dc.page_number,
                   REGEXP_REPLACE(
                     LOWER(TRIM(dc.context)),
@@ -70,20 +89,21 @@ router.get("/", async (req, res) => {
                     ' ',
                     'g'
                   )
-                ORDER BY
-                  d.created_at DESC
+                ORDER BY d.created_at DESC, d.id
               ) AS duplicate_number
-          FROM document_chunks dc
+           FROM document_chunks dc
           JOIN documents d ON d.id = dc.document_id
           CROSS JOIN query_terms qt
           WHERE d.status = 'ready'
+            AND ($3::uuid IS NULL OR d.id = $3::uuid)
             AND (
               to_tsvector('english', dc.context) @@ qt.search_query
               OR to_tsvector('english', dc.context) @@ qt.web_query
               OR EXISTS (
                 SELECT 1
                 FROM unnest($2::text[]) AS term
-                WHERE dc.context ILIKE '%' || term || '%')
+                WHERE dc.context ILIKE '%' || term || '%'
+              )
             )
       )
       SELECT
@@ -92,11 +112,11 @@ router.get("/", async (req, res) => {
           page_number,
           context,
           relevance
-      FROM ranked_passages
+      FROM matched_passages
       WHERE duplicate_number = 1
       ORDER BY relevance DESC, page_number ASC
       LIMIT 5`,
-      [question, searchTerms],
+      [question, searchTerms, documentId || null],
     );
 
     const results = result.rows.map((row) => ({
@@ -119,8 +139,9 @@ router.get("/", async (req, res) => {
     const uniqueCitations = Array.from(
       new Map(
         results.map((item) => [
-          `${item.filename.toLowerCase()}-${item.pageNumber}`,
+          `${item.documentId}-${item.pageNumber}`,
           {
+            documentId: item.documentId,
             filename: item.filename,
             pageNumber: item.pageNumber,
           },
@@ -131,6 +152,7 @@ router.get("/", async (req, res) => {
     res.status(200).json({
       success: true,
       question,
+      documentId: documentId || null,
       answer,
       resultCount: results.length,
       results,
@@ -151,8 +173,7 @@ router.get("/", async (req, res) => {
       return;
     }
 
-    if (
-      message.includes("temporarily unavailable")) {
+    if (message.includes("temporarily unavailable")) {
       res.status(503).json({
         success: false,
         error: "SERVICE_UNAVAILABLE",

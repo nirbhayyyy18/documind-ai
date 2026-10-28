@@ -6,6 +6,34 @@ import { extractPdfPages } from "../services/pdf.service.js";
 
 const router = Router();
 
+router.get("/", async (_req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, filename, page_count, status
+       FROM documents
+       WHERE status = 'ready'
+       ORDER BY created_at DESC`,
+    );
+
+    res.status(200).json({
+      success: true,
+      documents: result.rows.map((row) => ({
+        id: row.id as string,
+        filename: row.filename as string,
+        pageCount: Number(row.page_count),
+        status: row.status as string,
+      })),
+    });
+  } catch (error) {
+    console.error("Failed to fetch uploaded documents:", error);
+
+    res.status(500).json({
+      success: false,
+      message: "Unable to fetch uploaded documents.",
+    });
+  }
+});
+
 const upload = multer({
   storage: multer.memoryStorage(),
   limits: {

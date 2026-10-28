@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 type SearchResult = {
   documentId: string;
@@ -26,6 +26,8 @@ export default function Home() {
 
   const [file, setFile] = useState<File | null>(null);
   const [document, setDocument] = useState<UploadedDocument | null>(null);
+  const [documents, setDocuments] = useState<UploadedDocument[]>([]);
+  const [selectedDocumentId, setSelectedDocumentId] = useState("all");
   const [question, setQuestion] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [answer, setAnswer] = useState("");
@@ -33,6 +35,40 @@ export default function Home() {
   const [searching, setSearching] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
+
+  useEffect(() => {
+  let cancelled = false;
+
+  async function loadDocuments() {
+    try {
+      const response = await fetch(`${API_URL}/api/documents`);
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || "Unable to load documents.");
+      }
+
+      if (!cancelled) {
+        setDocuments(data.documents as UploadedDocument[]);
+      }
+    } catch (err) {
+      if (!cancelled) {
+        console.error("Failed to load documents:", err);
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Unable to load existing documents.",
+        );
+      }
+    }
+  }
+
+  void loadDocuments();
+
+  return () => {
+    cancelled = true;
+  };
+}, []);
 
   async function handleUpload() {
     if (!file) {
@@ -77,6 +113,17 @@ export default function Home() {
 
       setDocument(data.document);
 
+      setDocuments((previous) => {
+        const updated = [
+          data.document,
+          ...previous.filter((item) => item.id !== data.document.id),
+        ];
+
+        return updated;
+      });
+
+      setSelectedDocumentId(data.document.id);
+
       setMessage(
         `Successfully processed ${data.document.pageCount} page(s). You can now ask questions.`,
       );
@@ -112,7 +159,12 @@ export default function Home() {
     setAnswer("");
 
     try {
+
       const params = new URLSearchParams({ q: question.trim() });
+
+      if (selectedDocumentId !== "all") {
+        params.append("documentId", selectedDocumentId);
+      }
 
       const response = await fetch(
         `${API_URL}/api/search?${params.toString()}`,
@@ -352,6 +404,43 @@ export default function Home() {
 
             <form onSubmit={handleSearch}>
               <label
+                htmlFor="documentSelector"
+                className="mb-2 block text-sm font-semibold text-slate-700"
+              >
+                Search in document
+              </label>
+
+              <select
+                id="documentSelector"
+                value={selectedDocumentId}
+                onChange={(event) => setSelectedDocumentId(event.target.value)}
+                className="mb-5 w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm outline-none focus:border-indigo-400 focus:bg-white focus:ring-4 focus:ring-indigo-50"
+              >
+                <option value="all">All Documents</option>
+
+                {documents.map((item) => {
+                  const sameNameDocuments = documents.filter(
+                    (doc) => doc.filename === item.filename,
+                  );
+
+                  const documentIndex = sameNameDocuments.findIndex(
+                    (doc) => doc.id === item.id,
+                  );
+
+                  const label =
+                    sameNameDocuments.length > 1
+                      ? `${item.filename} (Document ${documentIndex + 1})`
+                      : item.filename;
+
+                  return (
+                    <option key={item.id} value={item.id}>
+                      {label}
+                    </option>
+                  );
+                })}
+              </select>
+
+              <label
                 htmlFor="question"
                 className="mb-2 block text-sm font-semibold text-slate-700"
               >
@@ -454,7 +543,7 @@ export default function Home() {
                         </span>
 
                         <span className="text-xs text-slate-400">
-                          Match {Math.round(result.relevance * 100)}%
+                          Relevance Score: {result.relevance.toFixed(3)}
                         </span>
                       </div>
 
