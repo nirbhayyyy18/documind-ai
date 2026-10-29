@@ -1,41 +1,44 @@
-# 📄 DocuMind AI
+# DocuMind AI 📄
 
-**AI-powered document understanding and question-answering with source citations.**
+**AI-powered document understanding and question answering with source citations.**
 
-DocuMind AI allows users to upload PDF documents, ask natural-language questions about their contents, and receive AI-generated answers grounded in relevant document passages.
+DocuMind AI lets users upload PDF documents, ask questions in natural language, and receive AI-generated answers grounded in relevant document passages.
 
-The application combines PostgreSQL search, PDF text extraction, and the Google Gemini API to help users find information in their documents.
+The application combines PDF text extraction, PostgreSQL, local Ollama embeddings, hybrid retrieval, and Google Gemini to make document analysis easier and more transparent.
 
 ## ✨ Features
 
-- **PDF Upload:** Upload PDF documents and extract their text.
-- **Document Search:** Retrieve relevant passages using PostgreSQL full-text search and keyword matching.
-- **AI-Powered Answers:** Generate context-aware answers using the Google Gemini API.
-- **Source Citations:** Display supporting passages with document names and page references when available.
-- **User Authentication:** Log in using the backend authentication API.
+- **PDF Upload and Extraction:** Upload PDF files and extract their text.
+- **Document Chunking:** Retrieve relevant document passages with page references.
+- **Semantic Search:** Generate embeddings using the `nomic-embed-text` model through Ollama.
+- **Keyword Search:** Search document content using PostgreSQL full-text search and keyword matching.
+- **Hybrid Retrieval:** Combine semantic and keyword rankings using Reciprocal Rank Fusion (RRF).
+- **AI-Powered Answers:** Generate answers using the Google Gemini API.
+- **Source Citations:** Return supporting passages with document filenames and page numbers.
+- **User Authentication:** Register and log in using authenticated backend APIs.
+- **Document Ownership:** Restrict document listing and retrieval to the authenticated user.
 - **Protected APIs:** Require authentication for document and search operations.
-- **Document Ownership:** Scope document access to the authenticated user.
-- **Interactive Interface:** Upload documents, ask questions, review answers, and view supporting sources.
-- **Automated Tests:** Test authentication, document routes, and search route behaviour.
+- **Automated Tests:** Test authentication, document routes, and search behaviour.
 
-## 🛠️ Tech Stack
+## 🧰 Tech Stack
 
 ### Frontend
 - Next.js
 - React
 - TypeScript
-- CSS
+- Tailwind CSS
 
 ### Backend
 - Node.js
 - Express.js
 - TypeScript
 - PostgreSQL
-- `pg` — PostgreSQL client
-- `pdf-parse` — PDF text extraction
-- Google Gemini API — AI-generated answers
-- JWT — Authentication tokens
-- bcrypt — Password hashing
+- `pg`
+- `pdf-parse`
+- Google Gemini API (`@google/genai`)
+- Ollama embeddings
+- JSON Web Tokens (JWT)
+- bcrypt
 
 ### Testing
 - Vitest
@@ -43,10 +46,12 @@ The application combines PostgreSQL search, PDF text extraction, and the Google 
 
 ## 📋 Prerequisites
 
-Before running the application, install or configure:
+Install or configure the following before running the application:
 
 - Node.js and npm
 - PostgreSQL
+- Ollama
+- The `nomic-embed-text` Ollama model
 - A Google Gemini API key
 - Git
 
@@ -59,47 +64,71 @@ git clone https://github.com/nirbhayyyy18/documind-ai.git
 cd documind-ai
 ```
 
-### 2. Configure PostgreSQL
+### 2. Set Up PostgreSQL
 
-Create a PostgreSQL database named `documind_ai`:
+Create a database named `documind_ai`:
 
 ```sql
 CREATE DATABASE documind_ai;
 ```
 
-Ensure PostgreSQL is running and that your database credentials are correct.
+Ensure PostgreSQL is running and that the database credentials are correct.
 
-Apply the SQL migration files provided in the `backend/migrations/` directory in the appropriate order. These migrations establish the database structure required by the application, including authentication and document ownership.
+Apply the SQL migrations in `backend/migrations/` in numerical order:
+
+1. `001_auth_and_document_ownership.sql`
+2. `002_add_chunk_embeddings.sql`
+
+**Note:** The initial database schema required by the application must exist before applying migrations that alter existing tables. If you have an existing database, back it up before making schema changes.
 
 ### 3. Configure Environment Variables
 
-Copy the root `.env.example` file into `backend/.env`.
-
-From the project root, run:
+From the project root, create the backend environment file using the example:
 
 ```powershell
 Copy-Item .env.example backend/.env
 ```
 
-Open `backend/.env` and replace the placeholder values with your own local PostgreSQL credentials and Gemini API key.
-
-The configuration includes:
+Open `backend/.env` and replace the placeholder values with your own configuration.
 
 | Variable | Purpose |
 |---|---|
 | `DB_HOST` | PostgreSQL server hostname |
 | `DB_PORT` | PostgreSQL server port |
-| `DB_NAME` | Database name |
+| `DB_NAME` | PostgreSQL database name |
 | `DB_USER` | PostgreSQL username |
 | `DB_PASSWORD` | PostgreSQL password |
 | `JWT_SECRET` | Secret used to sign authentication tokens |
 | `GEMINI_API_KEY` | Google Gemini API key |
+| `OLLAMA_BASE_URL` | Ollama server URL, usually `http://127.0.0.1:11434` |
 
 Use a randomly generated JWT secret with at least 32 characters.
 
-**Security:** Never commit `.env` files, database passwords, JWT secrets, or API keys to GitHub.
+**Security:** Never commit `.env` files, database credentials, JWT secrets, or API keys to GitHub.
 
-### 4. Install and Run the Backend
+### 4. Set Up Ollama
+
+Start Ollama and download the embedding model:
+
+```powershell
+ollama pull nomic-embed-text
+```
+
+Confirm that the model is available:
+
+```powershell
+ollama list
+```
+
+The embedding service uses the Ollama `/api/embed` endpoint. By default, it connects to:
+
+```text
+http://127.0.0.1:11434
+```
+
+Set `OLLAMA_BASE_URL` in `backend/.env` if your Ollama server uses a different address.
+
+### 5. Install and Run the Backend
 
 Open a terminal in the project root:
 
@@ -111,11 +140,13 @@ npm run dev
 
 The backend should run at:
 
-`http://localhost:5000`
+```text
+http://localhost:5000
+```
 
-Keep this terminal running.
+Keep the backend terminal running.
 
-### 5. Install and Run the Frontend
+### 6. Install and Run the Frontend
 
 Open a second terminal in the project root:
 
@@ -127,42 +158,52 @@ npm run dev
 
 Open the application in your browser:
 
-`http://localhost:3000`
+```text
+http://localhost:3000
+```
 
 Keep both development servers running while using the application.
 
-## 🔄 How It Works
+## 🔍 How It Works
 
-1. The user logs in through the application.
-2. The user uploads a PDF document.
-3. The backend extracts text and processes the document.
-4. Document information is stored in PostgreSQL.
-5. The user asks a question about the available documents.
-6. The backend retrieves relevant passages using PostgreSQL search.
-7. Retrieved passages are supplied as context to the Gemini API.
-8. The application displays the generated answer and supporting source references.
+1. The user registers or logs in.
+2. The application authenticates the user and protects document-related API operations.
+3. The user uploads a PDF document.
+4. The backend extracts and processes the document text.
+5. Document information and passages are stored in PostgreSQL.
+6. Ollama generates embeddings for document passages and user questions.
+7. Semantic retrieval ranks passages by cosine similarity.
+8. PostgreSQL full-text search and keyword matching retrieve relevant passages independently.
+9. Reciprocal Rank Fusion (RRF) combines the semantic and keyword result rankings.
+10. Relevant passages are supplied to Google Gemini as context.
+11. The application returns the generated answer and supporting source references.
+
+Semantic retrieval is optional at query time: if embedding generation or semantic retrieval fails, the route continues with keyword search.
 
 ## 🔌 API Overview
-
-The backend exposes the following primary endpoints.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
 | `GET` | `/api/health` | Check backend health |
-| `POST` | `/api/auth/login` | Authenticate a user and obtain a token |
-| `GET` | `/api/documents` | Retrieve the authenticated user's documents |
+| `POST` | `/api/auth/register` | Register a user |
+| `POST` | `/api/auth/login` | Authenticate a user |
+| `GET` | `/api/documents` | List the authenticated user's documents |
 | `POST` | `/api/documents/extract` | Upload and extract text from a PDF |
 | `GET` | `/api/search?q=your-question` | Search document content and generate an answer |
 
 Protected document and search endpoints require a valid authentication token.
 
-Include the token in the request header:
+Example authorization header:
 
 ```http
 Authorization: Bearer YOUR_JWT_TOKEN
 ```
 
-Refer to the backend route implementations for the precise request formats and response structures.
+The search endpoint accepts a `q` query parameter. It can also accept a `documentId` parameter to restrict the search to a specific document.
+
+Search questions must be no longer than 500 characters.
+
+Refer to the backend route implementations for the exact request formats and response structures.
 
 ## 🧪 Running Automated Tests
 
@@ -172,20 +213,41 @@ From the backend directory, run:
 npm test
 ```
 
-The automated test suite covers authentication middleware, login validation, document routes, and search routes.
+To run TypeScript type checking:
 
-The current suite contains 18 tests across four test files.
+```powershell
+npx tsc --noEmit
+```
+
+The test suite covers authentication middleware, authentication routes, document routes, and search behaviour.
+
+The test count may change as additional tests are added.
+
+## 🧩 Backfilling Embeddings
+
+The backend includes a script to generate embeddings for document chunks whose `embedding` value is currently `NULL`.
+
+Before running it, ensure PostgreSQL and Ollama are running, the `nomic-embed-text` model is available, and `backend/.env` is configured.
+
+From the backend directory, run:
+
+```powershell
+npx tsx src/scripts/backfill-embeddings.ts
+```
+
+The script reports successful and failed chunks. Review the output before relying on semantic retrieval for previously uploaded documents.
 
 ## 🔐 Security and Limitations
 
 - Keep API keys and database credentials in environment variables.
 - Protected endpoints require authentication.
 - Document queries are scoped to the authenticated user.
-- AI-generated answers may contain errors; verify important information against the cited passages.
-- Answer quality depends on PDF text extraction and the relevance of retrieved passages.
-- Gemini API availability and usage limits may affect answer generation.
+- AI-generated answers can contain errors; verify important information against the cited passages.
+- Answer quality depends on PDF extraction and passage retrieval.
+- Gemini API availability, quota, and usage limits can affect answer generation.
+- Semantic search requires Ollama and the embedding model.
 - The current document workflow focuses on PDFs.
-- Search currently uses PostgreSQL full-text search and keyword matching; this is not the same as vector-based semantic search.
+- Document ownership and access to existing records should be verified when migrating an existing database.
 
 ## 🎯 Project Goal
 
@@ -195,4 +257,4 @@ DocuMind AI aims to make document analysis faster and more accessible by allowin
 
 **Nirbhay Tiwari**
 
-Built with Next.js, Express.js, PostgreSQL, and Google Gemini.
+Built with Next.js, Express.js, PostgreSQL, Ollama, and Google Gemini.

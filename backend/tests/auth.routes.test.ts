@@ -3,9 +3,10 @@ import express from "express";
 import request from "supertest";
 import jwt from "jsonwebtoken";
 
-const { mockQuery, mockCompare } = vi.hoisted(() => ({
+const { mockQuery, mockCompare, mockHash } = vi.hoisted(() => ({
   mockQuery: vi.fn(),
   mockCompare: vi.fn(),
+  mockHash: vi.fn(),
 }));
 
 vi.mock("../src/db.js", () => ({
@@ -17,6 +18,7 @@ vi.mock("../src/db.js", () => ({
 vi.mock("bcrypt", () => ({
   default: {
     compare: mockCompare,
+    hash: mockHash,
   },
 }));
 
@@ -125,6 +127,125 @@ describe("POST /api/auth/login", () => {
     expect(typeof decoded).not.toBe("string");
     expect((decoded as jwt.JwtPayload).sub).toBe(
       "11111111-1111-4111-8111-111111111111",
+    );
+  });
+});
+
+describe("POST /api/auth/register", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.JWT_SECRET = TEST_SECRET;
+  });
+
+  afterEach(() => {
+    delete process.env.JWT_SECRET;
+  });
+
+  it("returns 400 for an invalid email", async () => {
+    const response = await request(app)
+      .post("/api/auth/register")
+      .send({
+        name: "Demo User",
+        email: "invalid-email",
+        password: "password123",
+      });
+
+    expect(response.status).toBe(400);
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockHash).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 for a password shorter than 8 characters", async () => {
+    const response = await request(app)
+      .post("/api/auth/register")
+      .send({
+        name: "Demo User",
+        email: "demo@example.com",
+        password: "short",
+      });
+
+    expect(response.status).toBe(400);
+    expect(mockQuery).not.toHaveBeenCalled();
+    expect(mockHash).not.toHaveBeenCalled();
+  });
+
+  it("creates a user with a hashed password", async () => {
+    mockHash.mockResolvedValueOnce("secure-mock-hash");
+
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          id: "22222222-2222-4222-8222-222222222222",
+          name: "Demo User",
+          email: "demo@example.com",
+        },
+      ],
+    });
+
+    const response = await request(app)
+      .post("/api/auth/register")
+      .send({
+        name: "Demo User",
+        email: "DEMO@example.com",
+        password: "password123",
+      });
+
+    expect(response.status).toBe(201);
+    expect(response.body.message).toBe(
+      "Registration successful. Please sign in.",
+    );
+
+    expect(mockHash).toHaveBeenCalledWith("password123", 12);
+
+    expect(mockQuery).toHaveBeenCalledWith(
+      expect.stringContaining("INSERT INTO users"),
+      ["Demo User", "demo@example.com", "secure-mock-hash"],
+    );
+
+    expect(response.body.user).toEqual({
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "Demo User",
+      email: "demo@example.com",
+    });
+
+    expect(response.body.user.password).toBeUndefined();
+    expect(response.body.user.password_hash).toBeUndefined();
+    expect(response.body.token).toBeUndefined();
+  });
+
+  it("returns 409 when the email already exists", async () => {
+    mockHash.mockResolvedValueOnce("secure-mock-hash");
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+
+    const response = await request(app)
+      .post("/api/auth/register")
+      .send({
+        name: "Demo User",
+        email: "demo@example.com",
+        password: "password123",
+      });
+
+    expect(response.status).toBe(409);
+    expect(response.body.error).toBe(
+      "An account with this email already exists.",
+    );
+  });
+
+  it("returns 500 when the database operation fails", async () => {
+    mockHash.mockResolvedValueOnce("secure-mock-hash");
+    mockQuery.mockRejectedValueOnce(new Error("Database unavailable"));
+
+    const response = await request(app)
+      .post("/api/auth/register")
+      .send({
+        name: "Demo User",
+        email: "demo@example.com",
+        password: "password123",
+      });
+
+    expect(response.status).toBe(500);
+    expect(response.body.error).toBe(
+      "Unable to create your account right now.",
     );
   });
 });

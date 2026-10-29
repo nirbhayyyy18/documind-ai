@@ -30,6 +30,7 @@ export default function Home() {
   const [selectedDocumentId, setSelectedDocumentId] = useState("all");
   const [question, setQuestion] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
+  const [selectedCitation, setSelectedCitation] = useState<string | null>(null);
   const [answer, setAnswer] = useState("");
   const [uploading, setUploading] = useState(false);
   const [searching, setSearching] = useState(false);
@@ -39,6 +40,13 @@ export default function Home() {
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loggingIn, setLoggingIn] = useState(false);
+  const [authMode, setAuthMode] = useState<"login" | "register">("login");
+
+const [registerName, setRegisterName] = useState("");
+const [registerEmail, setRegisterEmail] = useState("");
+const [registerPassword, setRegisterPassword] = useState("");
+const [confirmPassword, setConfirmPassword] = useState("");
+const [registering, setRegistering] = useState(false);
   const [currentUser, setCurrentUser] = useState<{
     id: string;
     name: string;
@@ -85,6 +93,72 @@ export default function Home() {
     );
   } finally {
     setLoggingIn(false);
+  }
+}
+
+async function handleRegister(event: React.FormEvent<HTMLFormElement>) {
+  event.preventDefault();
+
+  setError("");
+  setMessage("");
+
+  const name = registerName.trim();
+  const email = registerEmail.trim();
+
+  if (name.length < 2) {
+    setError("Name must contain at least 2 characters.");
+    return;
+  }
+
+  if (registerPassword.length < 8) {
+    setError("Password must contain at least 8 characters.");
+    return;
+  }
+
+  if (registerPassword !== confirmPassword) {
+    setError("Passwords do not match.");
+    return;
+  }
+
+  setRegistering(true);
+
+  try {
+    const response = await fetch(`${API_URL}/api/auth/register`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        name,
+        email,
+        password: registerPassword,
+      }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error || "Unable to create your account.");
+    }
+
+    setLoginEmail(email);
+    setLoginPassword("");
+
+    setRegisterName("");
+    setRegisterEmail("");
+    setRegisterPassword("");
+    setConfirmPassword("");
+
+    setAuthMode("login");
+    setMessage("Account created successfully! Please sign in.");
+  } catch (err) {
+    setError(
+      err instanceof Error
+        ? err.message
+        : "Unable to create your account.",
+    );
+  } finally {
+    setRegistering(false);
   }
 }
 
@@ -283,68 +357,214 @@ export default function Home() {
             </div>
 
             <h2 className="text-2xl font-bold tracking-tight">
-              Welcome to DocuMind AI
+              {authMode === "login" ? "Welcome to DocuMind AI" : "Create your account"}
             </h2>
 
             <p className="mt-2 text-sm text-slate-500">
-              Sign in to upload documents and ask questions about your PDFs.
+              {authMode === "login"
+                ? "Sign in to upload documents and ask questions about your PDFs."
+                : "Create an account to start exploring your documents with AI."}
             </p>
 
-            <form onSubmit={handleLogin} className="mt-7 space-y-5">
-              <div>
-                <label
-                  htmlFor="login-email"
-                  className="mb-2 block text-sm font-medium text-slate-700"
+            {authMode === "login" ? (
+              <form onSubmit={handleLogin} className="mt-7 space-y-5">
+                <div>
+                  <label
+                    htmlFor="login-email"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
+                    Email address
+                  </label>
+
+                  <input
+                    id="login-email"
+                    type="email"
+                    autoComplete="username"
+                    required
+                    value={loginEmail}
+                    onChange={(event) => setLoginEmail(event.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="login-password"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
+                    Password
+                  </label>
+
+                  <input
+                    id="login-password"
+                    type="password"
+                    autoComplete="current-password"
+                    required
+                    value={loginPassword}
+                    onChange={(event) => setLoginPassword(event.target.value)}
+                    placeholder="Enter your password"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                {error && (
+                  <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={loggingIn}
+                  className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
                 >
-                  Email address
-                </label>
+                  {loggingIn ? "Signing in..." : "Sign in"}
+                </button>
 
-                <input
-                  id="login-email"
-                  type="email"
-                  autoComplete="username"
-                  required
-                  value={loginEmail}
-                  onChange={(event) => setLoginEmail(event.target.value)}
-                  placeholder="you@example.com"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="login-password"
-                  className="mb-2 block text-sm font-medium text-slate-700"
-                >
-                  Password
-                </label>
-
-                <input
-                  id="login-password"
-                  type="password"
-                  autoComplete="current-password"
-                  required
-                  value={loginPassword}
-                  onChange={(event) => setLoginPassword(event.target.value)}
-                  placeholder="Enter your password"
-                  className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
-                />
-              </div>
-
-              {error && (
-                <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
-                  {error}
+                <p className="text-center text-sm text-slate-600">
+                  Don&apos;t have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode("register");
+                      setError("");
+                      setMessage("");
+                    }}
+                    className="font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Create account
+                  </button>
                 </p>
-              )}
+              </form>
+            ) : (
+              <form onSubmit={handleRegister} className="mt-7 space-y-5">
+                <div>
+                  <label
+                    htmlFor="register-name"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
+                    Full name
+                  </label>
 
-              <button
-                type="submit"
-                disabled={loggingIn}
-                className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                  <input
+                    id="register-name"
+                    type="text"
+                    autoComplete="name"
+                    minLength={2}
+                    maxLength={100}
+                    required
+                    value={registerName}
+                    onChange={(event) => setRegisterName(event.target.value)}
+                    placeholder="Enter your full name"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="register-email"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
+                    Email address
+                  </label>
+
+                  <input
+                    id="register-email"
+                    type="email"
+                    autoComplete="email"
+                    maxLength={255}
+                    required
+                    value={registerEmail}
+                    onChange={(event) => setRegisterEmail(event.target.value)}
+                    placeholder="you@example.com"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="register-password"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
+                    Password
+                  </label>
+
+                  <input
+                    id="register-password"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    maxLength={128}
+                    required
+                    value={registerPassword}
+                    onChange={(event) => setRegisterPassword(event.target.value)}
+                    placeholder="At least 8 characters"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                <div>
+                  <label
+                    htmlFor="confirm-password"
+                    className="mb-2 block text-sm font-medium text-slate-700"
+                  >
+                    Confirm password
+                  </label>
+
+                  <input
+                    id="confirm-password"
+                    type="password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    maxLength={128}
+                    required
+                    value={confirmPassword}
+                    onChange={(event) => setConfirmPassword(event.target.value)}
+                    placeholder="Re-enter your password"
+                    className="w-full rounded-xl border border-slate-300 px-4 py-3 text-sm outline-none transition focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100"
+                  />
+                </div>
+
+                {error && (
+                  <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">
+                    {error}
+                  </p>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={registering}
+                  className="w-full rounded-xl bg-indigo-600 px-4 py-3 font-semibold text-white transition hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {registering ? "Creating account..." : "Create account"}
+                </button>
+
+                <p className="text-center text-sm text-slate-600">
+                  Already have an account?{" "}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAuthMode("login");
+                      setError("");
+                      setMessage("");
+                    }}
+                    className="font-semibold text-indigo-600 hover:text-indigo-700"
+                  >
+                    Sign in
+                  </button>
+                </p>
+              </form>
+            )}
+
+            {message && (
+              <p
+                role="status"
+                className="mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700"
               >
-                {loggingIn ? "Signing in..." : "Sign in"}
-              </button>
-            </form>
+                {message}
+              </p>
+            )}
 
             <p className="mt-6 text-center text-xs text-slate-500">
               Secure access to your personal document workspace.
@@ -661,7 +881,8 @@ export default function Home() {
 
               {/* Answer Summary and Unique Citations */}
               {answer && results.length > 0 && (
-                <section className="mb-5 rounded-2xl border border-indigo-200 bg-indigo-50 p-4 sm:p-5">
+                <section className="mb-5 rounded-2xl border border-indigo-200
+                bg-indigo-50 p-4 sm:p-5">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
                     <span className="rounded-lg bg-indigo-600 px-2.5 py-1 text-xs font-bold tracking-wide text-white">
                       SEARCH SUMMARY
@@ -677,23 +898,44 @@ export default function Home() {
                   </p>
 
                   <div className="mt-4 border-t border-indigo-200 pt-3">
+
                     <h6 className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-600">
                       Source citations
                     </h6>
 
                     <div className="flex flex-wrap gap-2">
-                      {uniqueCitations.map((result) => (
-                        <span
-                          key={`${result.documentId}-${result.pageNumber}`}
-                          className="rounded-lg border border-indigo-200 bg-white px-3 py-2 text-xs font-medium text-slate-700"
-                        >
-                          📄 {result.filename} · Page {result.pageNumber}
-                        </span>
-                      ))}
+                      {uniqueCitations.map((result) => {
+                        const citationId = `citation-${result.documentId}-${result.pageNumber}`;
+
+                        return (
+                          <button
+                            key={citationId}
+                            type="button"
+                            onClick={() => {
+                              setSelectedCitation(citationId);
+
+                              window.document
+                                .getElementById(citationId)
+                                ?.scrollIntoView({
+                                  behavior: "smooth",
+                                  block: "center",
+                                });
+                            }}
+                            className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                              selectedCitation === citationId
+                                ? "border-indigo-500 bg-indigo-100 text-indigo-800 ring-2 ring-indigo-200"
+                                : "border-indigo-200 bg-white text-slate-700 hover:border-indigo-400 hover:bg-indigo-50"
+                            }`}
+                            >
+                              {result.filename} . Page {result.pageNumber}
+                            </button>
+                        );
+                      })}
                     </div>
                   </div>
                 </section>
               )}
+
 
               {results.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 px-4 py-8 text-center">
@@ -713,7 +955,12 @@ export default function Home() {
                   {results.map((result, index) => (
                     <article
                       key={`${result.documentId}-${result.pageNumber}-${index}`}
-                      className="rounded-xl border border-slate-200 p-4 transition hover:border-indigo-200"
+                      id={`citation-${result.documentId}-${result.pageNumber}`}
+                      className={`rounded-xl border p-4 transition ${
+                        selectedCitation === `citation-${result.documentId}-${result.pageNumber}`
+                          ? "border-indigo-500 bg-indigo-50 ring-2 ring-indigo-200 shadow-md"
+                          : "border-slate-200 hover:border-indigo-200"
+                      }`}
                     >
                       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
                         <span className="inline-flex items-center gap-2 rounded-full bg-indigo-50 px-3 py-1 text-xs font-semibold text-indigo-700">

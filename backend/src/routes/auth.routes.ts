@@ -11,6 +11,12 @@ const loginSchema = z.object({
   password: z.string().min(1).max(128),
 });
 
+const registerSchema = z.object({
+  name: z.string().trim().min(2).max(100),
+  email: z.string().trim().email().max(255),
+  password: z.string().min(8).max(128),
+});
+
 router.post("/login", async (req, res) => {
   const validation = loginSchema.safeParse(req.body);
 
@@ -71,6 +77,55 @@ router.post("/login", async (req, res) => {
     );
 
     res.status(500).json({ error: "Unable to process login right now." });
+  }
+});
+
+router.post("/register", async (req, res) => {
+  const validation = registerSchema.safeParse(req.body);
+
+  if (!validation.success) {
+    res.status(400).json({
+      error:
+        "Please provide a valid name, email, and password of at least 8 characters.",
+    });
+    return;
+  }
+
+  const name = validation.data.name;
+  const email = validation.data.email.toLowerCase();
+  const password = validation.data.password;
+
+  try {
+    const passwordHash = await bcrypt.hash(password, 12);
+
+    const result = await pool.query(
+      `INSERT INTO users (name, email, password_hash)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (email) DO NOTHING
+       RETURNING id, name, email`,
+      [name, email, passwordHash],
+    );
+
+    if (result.rows.length === 0) {
+      res.status(409).json({
+        error: "An account with this email already exists.",
+      });
+      return;
+    }
+
+    res.status(201).json({
+      message: "Registration successful. Please sign in.",
+      user: result.rows[0],
+    });
+  } catch (error) {
+    console.error(
+      "Registration failed:",
+      error instanceof Error ? error.message : "Unknown error",
+    );
+
+    res.status(500).json({
+      error: "Unable to create your account right now.",
+    });
   }
 });
 

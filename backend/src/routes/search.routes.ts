@@ -1,12 +1,41 @@
 import { Router } from "express";
 import { pool } from "../db.js";
 import { generateDocumentAnswer } from "../services/answer.service.js";
+import { generateEmbedding } from "../services/embedding.service.js";
 import {
   authenticateToken,
   type AuthenticatedRequest,
 } from "../middleware/auth.middleware.js";
 
 const router = Router();
+
+function cosineSimilarity(
+  vectorA: number[],
+  vectorB: number[],
+): number {
+  if (
+    vectorA.length === 0 ||
+    vectorA.length !== vectorB.length
+  ) {
+    return 0;
+  }
+
+  let dotProduct = 0;
+  let magnitudeA = 0;
+  let magnitudeB = 0;
+
+  for (let i = 0; i < vectorA.length; i++) {
+    dotProduct += vectorA[i] * vectorB[i];
+    magnitudeA += vectorA[i] * vectorA[i];
+    magnitudeB += vectorB[i] * vectorB[i];
+  }
+
+  if (magnitudeA === 0 || magnitudeB === 0) {
+    return 0;
+  }
+
+  return dotProduct / (Math.sqrt(magnitudeA) * Math.sqrt(magnitudeB));
+}
 
 // All search requests require authentication.
 router.use(authenticateToken);
@@ -72,6 +101,64 @@ router.get("/", async (req, res) => {
           ) ?? [],
       ),
     ];
+
+    type SearchResult = {
+      documentId: string;
+      filename: string;
+      pageNumber: number;
+      text: string;
+      relevance: number;
+    };
+
+    let semanticResults: SearchResult[] = [];
+
+    try {
+      // Generate an embedding for the user's question.
+      const questionEmbedding = await generateEmbedding(question);
+
+      // Fetch only the authenticated user's ready documents.
+      const embeddingResult = await pool.query(
+        `SELECT
+            d.id AS document_id,
+            d.filename,
+            dc.page_number,
+            dc.context,
+            dc.embedding
+         FROM document_chunks dc
+         JOIN documents d ON d.id = dc.document_id
+         WHERE d.user_id = $1::uuid
+           AND d.status = 'ready'
+           AND dc.embedding IS NOT NULL
+           AND ($2::uuid IS NULL OR d.id = $2::uuid)`,
+        [userId, documentId || null],
+      );
+
+      semanticResults = embeddingResult.rows
+        .map((row) => {
+          const storedEmbedding = row.embedding as number[];
+
+          const similarity = cosineSimilarity(
+            questionEmbedding,
+            storedEmbedding,
+          );
+
+          return {
+            documentId: row.document_id as string,
+            filename: row.filename as string,
+            pageNumber: Number(row.page_number),
+            text: row.context as string,
+            relevance: similarity,
+          };
+        })
+        .sort((a, b) => b.relevance - a.relevance)
+        .slice(0, 5);
+    } catch (error) {
+      // Semantic retrieval is optional; keyword search can still proceed.
+      console.error(
+        "Semantic search unavailable; continuing with keyword search:",
+        error instanceof Error ? error.message : "Unknown error",
+      );
+    }
 
     const result = await pool.query(
       `WITH query_terms AS (
@@ -143,13 +230,64 @@ router.get("/", async (req, res) => {
       [question, searchTerms, userId, documentId || null],
     );
 
-    const results = result.rows.map((row) => ({
+    const keywordResults = result.rows.map((row) => ({
       documentId: row.document_id as string,
       filename: row.filename as string,
       pageNumber: Number(row.page_number),
       text: row.context as string,
       relevance: Number(row.relevance),
     }));
+
+    const combinedResults = new Map<
+      string,
+      {
+        documentId: string;
+        filename: string;
+        pageNumber: number;
+        text: string;
+        relevance: number;
+      }
+    >();
+
+    const RRF_K = 60;
+
+    function getPassageKey(item: {
+      documentId: string;
+      pageNumber: number;
+      text: string;
+    }): string {
+      return `${item.documentId}-${item.pageNumber}-${item.text
+        .trim()
+        .toLowerCase()
+        .replace(/\s+/g, " ")}`;
+    }
+
+    function addRankedResults(
+      items: typeof semanticResults,
+    ): void {
+      items.forEach((item, index) => {
+        const key = getPassageKey(item);
+        const rankScore = 1 / (RRF_K + index + 1);
+
+        const existing = combinedResults.get(key);
+
+        if (existing) {
+          existing.relevance += rankScore;
+        } else {
+          combinedResults.set(key, {
+            ...item,
+            relevance: rankScore,
+          });
+        }
+      });
+    }
+
+    addRankedResults(semanticResults);
+    addRankedResults(keywordResults);
+
+    const results = Array.from(combinedResults.values())
+      .sort((a, b) => b.relevance - a.relevance)
+      .slice(0, 5);
 
     const answer = await generateDocumentAnswer(
       question,

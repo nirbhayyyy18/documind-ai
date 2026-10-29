@@ -3,6 +3,7 @@ import multer from "multer";
 import { randomUUID } from "node:crypto";
 import { pool } from "../db.js";
 import { extractPdfPages } from "../services/pdf.service.js";
+import { generateEmbedding } from "../services/embedding.service.js";
 import {
   authenticateToken,
   type AuthenticatedRequest,
@@ -102,14 +103,22 @@ router.post("/extract", upload.single("file"), async (req, res) => {
       await client.query("BEGIN");
 
       for (const page of pages) {
+        const embedding = await generateEmbedding(page.text);
+
         await client.query(
           `INSERT INTO document_chunks (
             document_id,
             page_number,
-            context
+            context,
+            embedding
           )
-          VALUES ($1, $2, $3)`,
-          [documentId, page.pageNumber, page.text],
+          VALUES ($1, $2, $3, $4)`,
+          [
+            documentId,
+            page.pageNumber,
+            page.text,
+            JSON.stringify(embedding),
+          ]
         );
       }
 
