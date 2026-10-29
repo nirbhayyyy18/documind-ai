@@ -101,6 +101,9 @@ Open `backend/.env` and replace the placeholder values with your own configurati
 | `JWT_SECRET` | Secret used to sign authentication tokens |
 | `GEMINI_API_KEY` | Google Gemini API key |
 | `OLLAMA_BASE_URL` | Ollama server URL, usually `http://127.0.0.1:11434` |
+| `DEMO_USER_NAME` | Name for the optional demo account |
+| `DEMO_USER_EMAIL` | Email address for the demo account |
+| `DEMO_USER_PASSWORD` | Demo account password (at least 12 characters) |
 
 Use a randomly generated JWT secret with at least 32 characters.
 
@@ -180,6 +183,76 @@ Keep both development servers running while using the application.
 
 Semantic retrieval is optional at query time: if embedding generation or semantic retrieval fails, the route continues with keyword search.
 
+## Demo Account Setup
+
+The project includes a seed script to create or update a demo user for local evaluation.
+
+### 1. Configure Demo Credentials
+
+Set the following variables in `backend/.env`:
+
+```env
+DEMO_USER_NAME=DocuMind Demo
+DEMO_USER_EMAIL=demo@example.com
+DEMO_USER_PASSWORD=your_demo_password_at_least_12_chars
+```
+
+Replace the password placeholder with a password of your choice that is at least 12 characters long. These credentials are intended for local development and evaluation only.
+
+### 2. Create the Demo User
+
+From the project root, run:
+
+```powershell
+cd backend
+npm run seed
+```
+
+The script creates or updates the demo account and assigns existing documents without an owner to that account.
+
+### 3. Sign In
+
+Start the backend and frontend, then open `http://localhost:3000`.
+
+Sign in with the email and password configured in `backend/.env`.
+
+**Note:** The seed script creates the demo account but does not create sample PDF documents. Upload a PDF after signing in to test document extraction, search, answers, and citations.
+
+## Database Design
+
+DocuMind AI uses PostgreSQL to store user accounts, uploaded document metadata, and extracted document chunks.
+
+### Main Tables
+
+| Table | Purpose |
+|---|---|
+| `users` | Stores registered user information and authentication-related data. |
+| `documents` | Stores document metadata, ownership information, and processing status. |
+| `document_chunks` | Stores extracted document passages, page references, and embeddings used for retrieval. |
+
+### Relationships
+
+- **Users → Documents:** A user can own multiple documents. Each document can be associated with a user.
+- **Documents → Document Chunks:** A document can contain multiple extracted chunks.
+- **Document Ownership:** Document listing and search operations are scoped to the authenticated user.
+
+### Design Decisions
+
+**PostgreSQL:** Provides persistent relational storage and supports full-text search.
+
+**Page-aware chunking:** Extracted text is divided into smaller passages while retaining page references, allowing answers to cite their sources.
+
+**Local embeddings with Ollama:** The `nomic-embed-text` model generates embeddings locally, reducing reliance on an external embedding API.
+
+**Hybrid retrieval:** Semantic similarity helps retrieve conceptually relevant passages, while keyword search helps find passages containing specific terms.
+
+**Reciprocal Rank Fusion (RRF):** Combines the rankings from semantic and keyword retrieval without requiring both methods to produce scores on the same scale.
+
+**Grounded answer generation:** Retrieved passages are supplied to the language model as context, and the application returns supporting document citations. Questions that cannot be answered from the retrieved content should receive an appropriate no-answer response.
+
+**Authentication and authorization:** Protected endpoints use JWT authentication, and document access is restricted on the backend rather than relying only on frontend filtering.
+
+
 ## 🔌 API Overview
 
 | Method | Endpoint | Purpose |
@@ -248,6 +321,64 @@ The script reports successful and failed chunks. Review the output before relyin
 - Semantic search requires Ollama and the embedding model.
 - The current document workflow focuses on PDFs.
 - Document ownership and access to existing records should be verified when migrating an existing database.
+
+## Implementation Status
+
+### Implemented Features
+
+- User registration and login using JWT authentication.
+- PDF upload and text extraction.
+- Document chunking with page references.
+- Embedding generation using Ollama and `nomic-embed-text`.
+- Semantic search using embedding similarity.
+- PostgreSQL full-text and keyword search.
+- Hybrid retrieval using Reciprocal Rank Fusion (RRF).
+- AI-generated answers using the Google Gemini API.
+- Source citations with document filenames and page numbers.
+- Document ownership checks for protected document and search operations.
+- Fallback to keyword retrieval when semantic retrieval is unavailable.
+- Backend automated tests for authentication, document routes, and search functionality.
+- A seed script for creating a demo account.
+
+### Known Limitations
+
+- PDF extraction quality depends on the structure and content of the uploaded file.
+- Scanned PDFs may require OCR support if their text cannot be extracted directly.
+- Semantic search depends on Ollama and the configured embedding model.
+- Answer generation depends on Google Gemini API availability and usage limits.
+- The current upload workflow processes document content during the upload request rather than using a separate background job queue.
+- The seed script creates a demo user but does not generate sample documents automatically.
+
+### Future Improvements
+
+Given more development time, the following improvements would be valuable:
+
+1. **Background document processing:** Process large PDFs asynchronously and provide reliable processing-status updates.
+2. **OCR support:** Extract text from scanned PDFs and image-based documents.
+3. **Persistent chat history:** Store conversations and allow users to revisit previous questions and answers.
+4. **Improved PDF viewer:** Highlight the exact cited passage in the document viewer.
+5. **Performance and scalability:** Add background workers, caching, and optimized retrieval for larger document collections.
+6. **Expanded testing:** Add more integration tests, authorization edge cases, and tests for PDF processing failures.
+7. **Deployment:** Deploy the frontend and backend with a securely configured production database and environment variables.
+
+These are proposed improvements and should not be interpreted as features already implemented.
+
+## AI Tools Used
+
+AI-assisted development tools may be used during development to support implementation, debugging, and documentation.
+
+### Google Gemini API
+- Generates answers to user questions using retrieved document passages as context.
+- Helps produce responses grounded in the uploaded documents.
+
+### Ollama — `nomic-embed-text`
+- Generates vector embeddings for document passages and search queries.
+- Supports semantic retrieval of relevant content.
+
+### Development Assistance
+AI coding assistants may be used to help understand errors, troubleshoot implementation issues, review code, and improve documentation. The final implementation should be tested and reviewed by the developer.
+
+AI-generated answers may occasionally be inaccurate, so users should verify important information against the cited source passages.
 
 ## 🎯 Project Goal
 
