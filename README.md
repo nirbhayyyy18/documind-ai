@@ -7,7 +7,6 @@
 
 <p align="center">
   <a href="https://documind-ai-ashy-tau.vercel.app/"><img src="https://img.shields.io/badge/Live_Demo-Visit_App-000000?style=for-the-badge&logo=vercel&logoColor=white" alt="Live Demo" /></a>
-  <a href="https://documind-ai-lsc1.onrender.com/api/health"><img src="https://img.shields.io/badge/API-Health_Check-46E3B7?style=for-the-badge&logo=render&logoColor=black" alt="API Health Check" /></a>
 </p>
 
 <p align="center">
