@@ -74,12 +74,11 @@ CREATE DATABASE documind_ai;
 
 Ensure PostgreSQL is running and that the database credentials are correct.
 
-Apply the SQL migrations in `backend/migrations/` in numerical order:
+For a fresh database, apply `backend/migrations/000_initial_schema.sql` first. This migration creates the `users`, `documents`, and `document_chunks` tables with their required columns, constraints, and indexes.
 
-1. `001_auth_and_document_ownership.sql`
-2. `002_add_chunk_embeddings.sql`
+The files `001_auth_and_document_ownership.sql` and `002_add_chunk_embeddings.sql` are incremental migrations for an older database schema. Do not run them automatically after the initial schema migration on a fresh database.
 
-**Note:** The initial database schema required by the application must exist before applying migrations that alter existing tables. If you have an existing database, back it up before making schema changes.
+If you are upgrading an existing database, back it up first and verify which migrations have already been applied before making schema changes.
 
 ### 3. Configure Environment Variables
 
