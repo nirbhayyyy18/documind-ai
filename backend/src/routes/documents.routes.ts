@@ -103,7 +103,10 @@ router.post("/extract", upload.single("file"), async (req, res) => {
       await client.query("BEGIN");
 
       for (const page of pages) {
-        const embedding = await generateEmbedding(page.text);
+        const embedding = await generateEmbedding(
+          page.text,
+          "RETRIEVAL_DOCUMENT",
+        );
 
         await client.query(
           `INSERT INTO document_chunks (

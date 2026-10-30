@@ -114,7 +114,10 @@ router.get("/", async (req, res) => {
 
     try {
       // Generate an embedding for the user's question.
-      const questionEmbedding = await generateEmbedding(question);
+      const questionEmbedding = await generateEmbedding(
+        question,
+        "RETRIEVAL_QUERY",
+      );
 
       // Fetch only the authenticated user's ready documents.
       const embeddingResult = await pool.query(
